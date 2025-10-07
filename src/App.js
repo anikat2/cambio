@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Eye, Crown, AlertCircle, Shuffle } from 'lucide-react';
 
+
 // Load Tailwind CSS
 if (typeof document !== 'undefined' && !document.getElementById('tailwind-styles')) {
   const script = document.createElement('script');
@@ -38,9 +39,9 @@ const CARD_VALUES = {
 };
 
 const SUITS = ['♠', '♥', '♦', '♣'];
-const [gameState, setGameState] = useState('menu');
 
 function CambioGame() {
+  const [gameState, setGameState] = useState('menu');
   const [configApiKey, setConfigApiKey] = useState('');
   const [configAuthDomain, setConfigAuthDomain] = useState('');
   const [configDatabaseURL, setConfigDatabaseURL] = useState('');
@@ -83,6 +84,7 @@ function CambioGame() {
     }
 
     try {
+    console.log(process.env.REACT_APP_apiKey);
       const firebaseConfig = {
         apiKey: process.env.REACT_APP_apiKey,
         authDomain: process.env.REACT_APP_authDomain,
@@ -93,7 +95,6 @@ function CambioGame() {
         appId: process.env.REACT_APP_appId,
         measurementId: process.env.REACT_APP_measurementId
       };
-
       firebaseAppRef.current = window.firebaseModules.initializeApp(firebaseConfig);
       setMessage('Firebase connected!');
       return true;
