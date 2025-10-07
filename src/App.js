@@ -38,6 +38,7 @@ const CARD_VALUES = {
 };
 
 const SUITS = ['♠', '♥', '♦', '♣'];
+const [gameState, setGameState] = useState('menu');
 
 function CambioGame() {
   const [configApiKey, setConfigApiKey] = useState('');
