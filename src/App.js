@@ -40,7 +40,6 @@ const CARD_VALUES = {
 const SUITS = ['♠', '♥', '♦', '♣'];
 
 function CambioGame() {
-  const [gameState, setGameState] = useState('setup');
   const [configApiKey, setConfigApiKey] = useState('');
   const [configAuthDomain, setConfigAuthDomain] = useState('');
   const [configDatabaseURL, setConfigDatabaseURL] = useState('');
@@ -475,7 +474,7 @@ function CambioGame() {
 
   const resetGame = () => {
     if (gameListenerRef.current) gameListenerRef.current();
-    setGameState('setup');
+    setGameState('menu');
     setRoomCode('');
     setGameData(null);
     setMyCards([]);
@@ -484,105 +483,6 @@ function CambioGame() {
     setHasViewedInitial(false);
     setMessage('');
   };
-
-  // Firebase Setup Screen
-  if (gameState === 'setup') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full">
-          <h1 className="text-4xl font-bold text-center text-green-800 mb-2">Cambio</h1>
-          <p className="text-center text-gray-600 mb-6">Multiplayer Card Game</p>
-          
-          {!firebaseReady && (
-            <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded-lg text-sm text-center">
-              Loading Firebase... Please wait a moment.
-            </div>
-          )}
-
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 className="font-bold text-lg mb-2 text-blue-800">Firebase Setup Required</h3>
-            <p className="text-sm text-gray-700 mb-3">
-              To use multiplayer, you need to set up a Firebase project:
-            </p>
-            <ol className="text-sm text-gray-700 space-y-1 ml-4 list-decimal">
-              <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a></li>
-              <li>Create a new project</li>
-              <li>Enable Realtime Database</li>
-              <li>Set database rules to allow read/write</li>
-              <li>Get your config from Project Settings</li>
-              <li>Enter your config below</li>
-            </ol>
-          </div>
-
-          <div className="space-y-3 mb-6">
-            <input
-              type="text"
-              placeholder="API Key"
-              value={configApiKey}
-              onChange={(e) => setConfigApiKey(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Auth Domain (yourproject.firebaseapp.com)"
-              value={configAuthDomain}
-              onChange={(e) => setConfigAuthDomain(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Database URL (https://yourproject-default-rtdb.firebaseio.com)"
-              value={configDatabaseURL}
-              onChange={(e) => setConfigDatabaseURL(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Project ID"
-              value={configProjectId}
-              onChange={(e) => setConfigProjectId(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Storage Bucket (yourproject.appspot.com)"
-              value={configStorageBucket}
-              onChange={(e) => setConfigStorageBucket(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Messaging Sender ID"
-              value={configMessagingSenderId}
-              onChange={(e) => setConfigMessagingSenderId(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="App ID"
-              value={configAppId}
-              onChange={(e) => setConfigAppId(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
-            />
-          </div>
-
-          <button
-            onClick={() => setGameState('menu')}
-            disabled={!firebaseReady}
-            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            Continue to Game
-          </button>
-
-          {message && (
-            <div className="mt-4 p-3 bg-blue-100 text-blue-800 rounded-lg text-sm text-center">
-              {message}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // Menu Screen
   if (gameState === 'menu') {
