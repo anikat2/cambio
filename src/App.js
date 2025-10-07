@@ -9,10 +9,28 @@ if (typeof document !== 'undefined' && !document.getElementById('tailwind-styles
   document.head.appendChild(script);
 }
 
-// Firebase will be loaded dynamically
-let firebaseApp = null;
-let firebaseDatabase = null;
-let firebaseInitialized = false;
+// Load Firebase via CDN
+if (typeof window !== 'undefined' && !window.firebaseLoaded) {
+  const firebaseScript = document.createElement('script');
+  firebaseScript.type = 'module';
+  firebaseScript.innerHTML = `
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getDatabase, ref, set, onValue, update, onDisconnect } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+    
+    window.firebaseModules = {
+      initializeApp,
+      getDatabase,
+      ref,
+      set,
+      onValue,
+      update,
+      onDisconnect
+    };
+    window.firebaseLoaded = true;
+    window.dispatchEvent(new Event('firebaseReady'));
+  `;
+  document.head.appendChild(firebaseScript);
+}
 
 const CARD_VALUES = {
   'A': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
@@ -41,9 +59,28 @@ function CambioGame() {
   const [message, setMessage] = useState('');
   const [hasViewedInitial, setHasViewedInitial] = useState(false);
   const gameListenerRef = useRef(null);
+  const firebaseAppRef = useRef(null);
 
-  const initializeFirebase = async () => {
-    if (firebaseInitialized) return true;
+  useEffect(() => {
+    const checkFirebase = () => {
+      if (window.firebaseModules) {
+        setFirebaseReady(true);
+      }
+    };
+
+    window.addEventListener('firebaseReady', checkFirebase);
+    checkFirebase();
+
+    return () => window.removeEventListener('firebaseReady', checkFirebase);
+  }, []);
+
+  const initializeFirebase = () => {
+    if (firebaseAppRef.current) return true;
+
+    if (!window.firebaseModules) {
+      setMessage('Firebase is still loading... Please wait a moment and try again.');
+      return false;
+    }
 
     try {
       const firebaseConfig = {
@@ -57,13 +94,7 @@ function CambioGame() {
         measurementId: process.env.REACT_APP_measurementId
       };
 
-      const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
-      const { getDatabase, ref, set, onValue, update, onDisconnect } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js');
-
-      firebaseApp = initializeApp(firebaseConfig);
-      firebaseDatabase = { getDatabase, ref, set, onValue, update, onDisconnect };
-      firebaseInitialized = true;
-      setFirebaseReady(true);
+      firebaseAppRef.current = window.firebaseModules.initializeApp(firebaseConfig);
       setMessage('Firebase connected!');
       return true;
     } catch (error) {
@@ -93,43 +124,46 @@ function CambioGame() {
       return;
     }
 
-    if (!firebaseReady) {
-      const initialized = await initializeFirebase();
-      if (!initialized) return;
-    }
+    const initialized = initializeFirebase();
+    if (!initialized) return;
 
     const code = Math.random().toString(36).substr(2, 6).toUpperCase();
     const deck = createDeck();
     
-    const { getDatabase, ref, set, onDisconnect } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, set, onDisconnect } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
     const gameRef = ref(db, `games/${code}`);
 
-    await set(gameRef, {
-      host: playerId,
-      deck: deck,
-      discardPile: [],
-      currentPlayerIndex: 0,
-      playerOrder: [playerId],
-      players: {
-        [playerId]: {
-          name: playerName,
-          cards: [],
-          hasViewedInitial: false,
-          connected: true
-        }
-      },
-      started: false,
-      phase: 'lobby',
-      gameOver: false
-    });
+    try {
+      await set(gameRef, {
+        host: playerId,
+        deck: deck,
+        discardPile: [],
+        currentPlayerIndex: 0,
+        playerOrder: [playerId],
+        players: {
+          [playerId]: {
+            name: playerName,
+            cards: [],
+            hasViewedInitial: false,
+            connected: true
+          }
+        },
+        started: false,
+        phase: 'lobby',
+        gameOver: false
+      });
 
-    onDisconnect(ref(db, `games/${code}/players/${playerId}/connected`)).set(false);
+      onDisconnect(ref(db, `games/${code}/players/${playerId}/connected`)).set(false);
 
-    setRoomCode(code);
-    listenToGame(code);
-    setGameState('lobby');
-    setMessage(`Room created! Code: ${code}`);
+      setRoomCode(code);
+      listenToGame(code);
+      setGameState('lobby');
+      setMessage(`Room created! Code: ${code}`);
+    } catch (error) {
+      setMessage('Error creating game: ' + error.message);
+      console.error(error);
+    }
   };
 
   const joinGame = async () => {
@@ -138,52 +172,55 @@ function CambioGame() {
       return;
     }
 
-    if (!firebaseReady) {
-      const initialized = await initializeFirebase();
-      if (!initialized) return;
-    }
+    const initialized = initializeFirebase();
+    if (!initialized) return;
 
-    const { getDatabase, ref, set, onValue, update, onDisconnect } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, set, onValue, update, onDisconnect } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
     const gameRef = ref(db, `games/${roomCode.toUpperCase()}`);
 
-    const snapshot = await new Promise(resolve => onValue(gameRef, resolve, { onlyOnce: true }));
-    
-    if (!snapshot.val()) {
-      setMessage('Room not found!');
-      return;
+    try {
+      const snapshot = await new Promise(resolve => onValue(gameRef, resolve, { onlyOnce: true }));
+      
+      if (!snapshot.val()) {
+        setMessage('Room not found!');
+        return;
+      }
+
+      const game = snapshot.val();
+      if (game.started) {
+        setMessage('Game already started!');
+        return;
+      }
+
+      const newPlayerOrder = [...game.playerOrder, playerId];
+      await update(ref(db, `games/${roomCode.toUpperCase()}`), {
+        playerOrder: newPlayerOrder
+      });
+
+      await set(ref(db, `games/${roomCode.toUpperCase()}/players/${playerId}`), {
+        name: playerName,
+        cards: [],
+        hasViewedInitial: false,
+        connected: true
+      });
+
+      onDisconnect(ref(db, `games/${roomCode.toUpperCase()}/players/${playerId}/connected`)).set(false);
+
+      listenToGame(roomCode.toUpperCase());
+      setGameState('lobby');
+      setMessage('Joined game!');
+    } catch (error) {
+      setMessage('Error joining game: ' + error.message);
+      console.error(error);
     }
-
-    const game = snapshot.val();
-    if (game.started) {
-      setMessage('Game already started!');
-      return;
-    }
-
-    const newPlayerOrder = [...game.playerOrder, playerId];
-    await update(ref(db, `games/${roomCode.toUpperCase()}`), {
-      playerOrder: newPlayerOrder
-    });
-
-    await set(ref(db, `games/${roomCode.toUpperCase()}/players/${playerId}`), {
-      name: playerName,
-      cards: [],
-      hasViewedInitial: false,
-      connected: true
-    });
-
-    onDisconnect(ref(db, `games/${roomCode.toUpperCase()}/players/${playerId}/connected`)).set(false);
-
-    listenToGame(roomCode.toUpperCase());
-    setGameState('lobby');
-    setMessage('Joined game!');
   };
 
   const listenToGame = (code) => {
     if (gameListenerRef.current) gameListenerRef.current();
 
-    const { getDatabase, ref, onValue } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, onValue } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
     const gameRef = ref(db, `games/${code}`);
 
     gameListenerRef.current = onValue(gameRef, (snapshot) => {
@@ -219,8 +256,8 @@ function CambioGame() {
       return;
     }
 
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     let deck = [...gameData.deck];
     const updatedPlayers = {};
@@ -251,8 +288,8 @@ function CambioGame() {
   const viewInitialCards = async () => {
     if (hasViewedInitial) return;
 
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const updatedCards = [...myCards];
     updatedCards[0].visible = true;
@@ -275,8 +312,8 @@ function CambioGame() {
   };
 
   const checkAllViewed = async () => {
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const allViewed = gameData.playerOrder.every(pid => 
       gameData.players[pid].hasViewedInitial
@@ -292,8 +329,8 @@ function CambioGame() {
   const drawCard = async () => {
     if (drawnCard || !isMyTurn()) return;
 
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const deck = [...gameData.deck];
     if (deck.length === 0) {
@@ -315,8 +352,8 @@ function CambioGame() {
   const swapCard = async (cardIndex) => {
     if (!drawnCard) return;
 
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const updatedCards = [...myCards];
     const oldCard = updatedCards[cardIndex].card;
@@ -340,8 +377,8 @@ function CambioGame() {
   const discardDrawn = async () => {
     if (!drawnCard) return;
 
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const newDiscard = [...gameData.discardPile, drawnCard];
 
@@ -355,8 +392,8 @@ function CambioGame() {
   };
 
   const nextTurn = async () => {
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const nextIndex = (gameData.currentPlayerIndex + 1) % gameData.playerOrder.length;
 
@@ -373,8 +410,8 @@ function CambioGame() {
   const callCambio = async () => {
     if (!isMyTurn() || drawnCard) return;
 
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const myIndex = gameData.playerOrder.indexOf(playerId);
 
@@ -389,8 +426,8 @@ function CambioGame() {
   };
 
   const endGame = async () => {
-    const { getDatabase, ref, update } = firebaseDatabase;
-    const db = getDatabase(firebaseApp);
+    const { getDatabase, ref, update } = window.firebaseModules;
+    const db = getDatabase(firebaseAppRef.current);
 
     const revealedPlayers = {};
     gameData.playerOrder.forEach(pid => {
@@ -448,6 +485,7 @@ function CambioGame() {
     setMessage('');
   };
 
+  // Firebase Setup Screen
   if (gameState === 'setup') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-600 flex items-center justify-center p-4">
@@ -455,15 +493,22 @@ function CambioGame() {
           <h1 className="text-4xl font-bold text-center text-green-800 mb-2">Cambio</h1>
           <p className="text-center text-gray-600 mb-6">Multiplayer Card Game</p>
           
+          {!firebaseReady && (
+            <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded-lg text-sm text-center">
+              Loading Firebase... Please wait a moment.
+            </div>
+          )}
+
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h3 className="font-bold text-lg mb-2 text-blue-800">Firebase Setup Required</h3>
             <p className="text-sm text-gray-700 mb-3">
               To use multiplayer, you need to set up a Firebase project:
             </p>
             <ol className="text-sm text-gray-700 space-y-1 ml-4 list-decimal">
-              <li>Go to <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-600 underline">Firebase Console</a></li>
+              <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a></li>
               <li>Create a new project</li>
               <li>Enable Realtime Database</li>
+              <li>Set database rules to allow read/write</li>
               <li>Get your config from Project Settings</li>
               <li>Enter your config below</li>
             </ol>
@@ -486,7 +531,7 @@ function CambioGame() {
             />
             <input
               type="text"
-              placeholder="Database URL (https://yourproject.firebaseio.com)"
+              placeholder="Database URL (https://yourproject-default-rtdb.firebaseio.com)"
               value={configDatabaseURL}
               onChange={(e) => setConfigDatabaseURL(e.target.value)}
               className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 text-sm"
@@ -523,7 +568,8 @@ function CambioGame() {
 
           <button
             onClick={() => setGameState('menu')}
-            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition"
+            disabled={!firebaseReady}
+            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             Continue to Game
           </button>
@@ -538,6 +584,7 @@ function CambioGame() {
     );
   }
 
+  // Menu Screen
   if (gameState === 'menu') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-600 flex items-center justify-center p-4">
@@ -594,6 +641,7 @@ function CambioGame() {
     );
   }
 
+  // Lobby Screen
   if (gameState === 'lobby') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-600 flex items-center justify-center p-4">
@@ -641,6 +689,7 @@ function CambioGame() {
     );
   }
 
+  // Game Screen
   if (gameState === 'game') {
     const myTurn = isMyTurn();
 
@@ -704,8 +753,7 @@ function CambioGame() {
                             {isMe && (cardObj.visible || viewedCards.includes(cardIdx)) ? (
                               <span className={getCardColor(cardObj.card)}>{cardObj.card}</span>
                             ) : (
-                              <div className="text-green-700">🂠</div>
-                            )}
+                              <div className="text-green-700">🂠</div>                            )}
                           </div>
                         ))}
                       </div>
