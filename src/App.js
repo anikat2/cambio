@@ -47,14 +47,14 @@ function CambioGame() {
 
     try {
       const firebaseConfig = {
-        apiKey: "AIzaSyB_-qYcTEiMOg5wT97QgOf76iEeK9FP6Jw",
-        authDomain: "cambio-8ce14.firebaseapp.com",
-        databaseURL: "https://cambio-8ce14-default-rtdb.firebaseio.com",
-        projectId: "cambio-8c37e14",
-        storageBucket: "cambio-8ce14.firebasestorage.app",
-        messagingSenderId: "985451632057",
-        appId: "1:985451632057:web:d3562acdaf29f2bb24d268",
-        measurementId: "G-C9SZB4ZJ39"
+        apiKey: process.env.REACT_APP_apiKey,
+        authDomain: process.env.REACT_APP_authDomain,
+        databaseURL: process.env.REACT_APP_databaseURL,
+        projectId: process.env.REACT_APP_projectId,
+        storageBucket: process.env.REACT_APP_storageBucket,
+        messagingSenderId: process.env.REACT_APP_messagingSenderId,
+        appId: process.env.REACT_APP_appId,
+        measurementId: process.env.REACT_APP_measurementId
       };
 
       const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
